@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Health insurance chart</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; background:#FDF9F4; color:#1E1F21; }
+    .chart-wrapper {
+      max-width: 720px;
+      margin: 28px auto;
+      padding: 32px 20px;
+      background: #FDF9F4;
+      border: 1px solid #D8D3CC;
+      border-radius: 8px;
+    }
+    .top-rule { border-top: 3px solid #1a1a2e; padding-top: 4px; }
+    .top-rule-inner { border-top: 0.75px solid #1a1a2e; padding-top: 16px; }
+    .chart-wrapper h2 { font-size: 24px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; color:#1E1F21; }
+    .chart-wrapper .subtitle { font-size: 15px; color: #4A4A4A; margin: 0 0 20px; font-style: italic; }
+    .eras { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+    .era-tag { font-size: 12px; padding: 4px 12px; border-radius: 12px; color: #1a1a2e; white-space: nowrap; font-weight: 600; }
+    .chart-box { width: 100%; height: 400px; }
+    .callout { margin-top: 20px; padding: 14px 18px; border-radius: 6px; border-left: 4px solid #999; background:#F0EDE8; font-size: 15px; line-height: 1.6; }
+    .source { font-size: 12px; color: #6B6B6B; margin-top: 16px; line-height: 1.6; }
+  </style>
+</head>
+
+<body>
+  <!-- HEALTH INSURANCE CHART -->
+  <div class="chart-wrapper">
+    <div class="top-rule">
+      <div class="top-rule-inner">
+        <h2>Health insurance: the cost that ate the budget</h2>
+        <p class="subtitle">Town spending on health insurance, FY2002&ndash;FY2027 (budgeted)</p>
+      </div>
+    </div>
+
+    <div class="eras">
+      <span class="era-tag" style="background:#fce4e4">Escalation</span>
+      <span class="era-tag" style="background:#dcf0e0">GIC switch</span>
+      <span class="era-tag" style="background:#dde6f0">Plateau</span>
+      <span class="era-tag" style="background:#f5edde">Rebound</span>
+    </div>
+
+    <div class="chart-box">
+      <canvas id="insuranceChart"></canvas>
+    </div>
+
+    <div class="callout">
+      <strong>The levy squeeze:</strong> Under Proposition 2&frac12;, the tax levy rises about $2.2 million per year.
+      The FY2027 health insurance increase alone &mdash; from $13.7 million to $15.8 million &mdash; consumes roughly $2.1 million
+      of that growth before any other spending. Against a projected municipal budget of about $112 million, the town spends roughly
+      one out of every $7 on employee and retiree health coverage.
+    </div>
+
+    <p class="source">
+      FY2027 is the budgeted amount based on adopted GIC rates ($15,814,317). FY25 actual: $12.3M.
+      Sources: FinCom budget presentations, GIC rate announcements and Marblehead Independent reporting.
+    </p>
+  </div>
+
+  <script>
+    /* Health insurance chart */
+    (function () {
+      const labels = ["FY02","FY03","FY04","FY05","FY06","FY07","FY08","FY09","FY10","FY11","FY12","FY13","FY14","FY15","FY16","FY17","FY18","FY19","FY20","FY21","FY22","FY23","FY24","FY25","FY26","FY27*"];
+
+      const spending = [9.1, 12.0, 14.5, 16.2, 18.0, 11.8, 10.5, 9.4, 9.2, 9.4, 9.5, 9.6, 9.8, 10.0, 10.1, 10.2, 10.3, 10.5, 10.7, 11.0, 11.5, 11.8, 12.2, 12.3, 13.7, 15.8];
+
+      const share = [17.0, 22.0, 26.0, 29.0, 33.4, 21.0, 18.0, 16.1, 14.5, 14.2, 13.8, 13.5, 13.3, 13.1, 13.0, 12.9, 12.7, 12.6, 12.4, 12.5, 12.8, 13.0, 13.3, 13.5, 14.1, 14.1];
+
+      const eraBoundaries = [
+        { start: 0, end: 4,  color: "rgba(252,228,228,0.45)" },
+        { start: 5, end: 7,  color: "rgba(220,240,224,0.45)" },
+        { start: 8, end: 17, color: "rgba(221,230,240,0.45)" },
+        { start: 18, end: 25, color: "rgba(245,237,222,0.45)" },
+      ];
+
+      const bgPlugin = {
+        id: "shellWhiteBg",
+        beforeDraw(chart) {
+          const { ctx, width, height } = chart;
+          ctx.save();
+          ctx.fillStyle = "#FDF9F4";
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        }
+      };
+
+      const eraPlugin = {
+        id: "eraBackground",
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea) return;
+          eraBoundaries.forEach((era) => {
+            const x1 = scales.x.getPixelForValue(era.start);
+            const x2 = scales.x.getPixelForValue(era.end);
+            ctx.fillStyle = era.color;
+            ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
+          });
+        }
+      };
+
+      const annotationPlugin = {
+        id: "annotations",
+        afterDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea) return;
+          ctx.save();
+
+          const peakX = scales.x.getPixelForValue(4);
+          const peakY = scales.y.getPixelForValue(18.0);
+          ctx.fillStyle = "#c0392b";
+          ctx.font = "bold 11px Georgia, serif";
+          ctx.textAlign = "center";
+          ctx.fillText("$18M peak", peakX, peakY - 14);
+
+          const gicX = scales.x.getPixelForValue(5);
+          const gicY = scales.y.getPixelForValue(11.8);
+          ctx.fillStyle = "#27785a";
+          ctx.font = "bold 10px Georgia, serif";
+          ctx.fillText("GIC", gicX, gicY - 12);
+
+          const fy27X = scales.x.getPixelForValue(25);
+          const fy27Y = scales.y.getPixelForValue(15.8);
+          ctx.fillStyle = "#c0392b";
+          ctx.font = "bold 12px Georgia, serif";
+          ctx.textAlign = "right";
+          ctx.fillText("$15.8M", fy27X + 4, fy27Y - 12);
+
+          const fy02X = scales.x.getPixelForValue(0);
+          const fy02Y = scales.y.getPixelForValue(9.1);
+          ctx.fillStyle = "#9ca3af";
+          ctx.font = "11px Georgia, serif";
+          ctx.textAlign = "left";
+          ctx.fillText("$9.1M", fy02X + 6, fy02Y - 10);
+
+          ctx.restore();
+        }
+      };
+
+      const ctx = document.getElementById("insuranceChart").getContext("2d");
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Spending ($M)",
+            data: spending,
+            borderColor: "#c0392b",
+            backgroundColor: "rgba(192,57,43,0.08)",
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.25,
+            pointRadius(context) {
+              const i = context.dataIndex;
+              if (i === 0 || i === 4 || i === 5 || i === 8 || i === 23 || i === 25) return 5;
+              return 2.5;
+            },
+            pointBackgroundColor(context) {
+              if (context.dataIndex === 5) return "#FFFFFF";
+              return "#c0392b";
+            },
+            pointBorderColor(context) {
+              if (context.dataIndex === 5) return "#27785a";
+              return "#FDF9F4";
+            },
+            pointBorderWidth(context) {
+              if (context.dataIndex === 5) return 2.5;
+              return 1.5;
+            },
+            pointHoverRadius: 7,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 20,
+              ticks: {
+                callback: (v) => `$${v}M`,
+                font: { family: "Georgia, serif", size: 12 },
+                color: "#9ca3af",
+                stepSize: 5,
+              },
+              grid: { color: "#e5e7eb", drawBorder: false },
+              border: { color: "#1a1a2e" },
+            },
+            x: {
+              ticks: {
+                font: { family: "Georgia, serif", size: 11 },
+                color: "#9ca3af",
+                maxRotation: 45,
+                autoSkip: true,
+                maxTicksLimit: 14,
+              },
+              grid: { display: false },
+              border: { color: "#1a1a2e" },
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              titleFont: { family: "Georgia, serif", size: 14, weight: "bold" },
+              bodyFont: { family: "Georgia, serif", size: 13 },
+              backgroundColor: "#FDF9F4",
+              titleColor: "#1a1a2e",
+              bodyColor: "#4A4A4A",
+              borderColor: "#D0CCC5",
+              borderWidth: 1,
+              displayColors: false,
+              callbacks: {
+                label: (ctx) => `Spending: $${ctx.parsed.y.toFixed(1)}M`,
+                afterLabel: (ctx) => `Share of general fund: ~${share[ctx.dataIndex]}%`
+              }
+            }
+          },
+          interaction: { mode: "index", intersect: false },
+        },
+        plugins: [bgPlugin, eraPlugin, annotationPlugin],
+      });
+    })();
+  </script>
+</body>
+</html>
